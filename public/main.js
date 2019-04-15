@@ -13,7 +13,11 @@ const initial_data = {
   indTableCursor: 0,
   user: null,
   maxIndPageSize: 5,
-  colors: ["red", "green", "blue", "yellow"]
+  colors: ["red", "green", "blue", "yellow"],
+  authenticated: false,
+  new_user_form: false,
+  login_error: false,
+  login_error_message: "wtg"
 };
 const app = new Vue({
   el: "#app-container",
@@ -27,49 +31,108 @@ const app = new Vue({
     this.setQuestion();
   },
   methods: {
+    logIn: function(e) {
+      e.preventDefault();
+      const email = document.getElementById("email-input");
+      const password = document.getElementById("password-input");
+      const c_pw = document.getElementById("confirm-password-input");
+      const context = this;
+      if (this.new_user_form) {
+        if (password.value !== c_pw.value) return this.passwordMismatch();
+        firebase
+          .auth()
+          .createUserWithEmailAndPassword(email.value, password.value)
+          .then(res => {
+            context.loginSuccessful(res.user);
+          })
+          .catch(function(error) {
+            // Handle Errors here.
+            const errorMessage = error.message;
+            // ...
+            context.login_error = true;
+            context.login_error_message = errorMessage;
+          });
+      } else {
+        firebase
+          .auth()
+          .signInWithEmailAndPassword(email.value, password.value)
+          .then(res => {
+            context.loginSuccessful(res.user);
+          })
+          .catch(function(error) {
+            // Handle Errors here.
+            const errorMessage = error.message;
+            // ...
+            context.login_error = true;
+            context.login_error_message = errorMessage;
+          });
+      }
+    },
+    loginSuccessful: function(user) {
+      this.authenticated = true;
+      this.new_user_form = false;
+      this.login_error = false;
+      this.login_error_message = null;
+      this.user = user.email;
+    },
+    logoutSuccessful: function() {
+      this.resetState(true);
+    },
+    logOut: function(e) {
+      e.preventDefault();
+      const context = this;
+      firebase
+        .auth()
+        .signOut()
+        .then(function() {
+          // Sign-out successful.
+          context.logoutSuccessful();
+        })
+        .catch(function(error) {
+          // An error happened.
+          context.handleError(error);
+        });
+    },
+    passwordMismatch: function() {
+      this.login_error = true;
+      this.login_error_message = "Passwords do not match.";
+    },
+    showNewUserForm: function() {
+      this.new_user_form = true;
+    },
+    hideNewUserForm: function() {
+      this.new_user_form = false;
+    },
     resetState: function(reset_user = false) {
       Object.keys(initial_data).forEach(k => {
-        if (!reset_user && k === "user") return;
+        if (!reset_user && (k === "user" || k === "authenticated")) return;
         this[k] = initial_data[k];
       });
     },
     submit: function() {
       /**
-       * show input to get user name
-       */
-      this.name_submission = true;
-    },
-    done: function() {
-      /**
        * validate that this user has not submitted a response for this question
        * if validated, then save response into firebase
        * if not validated, then hide input to get username and show message that says "you've already answered this question"
        */
-      const input_el = document.getElementById("name-input");
-      if (!input_el.value) return this.displayNameRequired();
-      else if (input_el.classList.contains("error"))
-        input_el.classList.remove("error");
 
       this.getResponses(this.question.id)
         .then(responses => {
-          responses = responses.filter(r => r.user_id === input_el.value);
+          responses = responses.filter(r => r.user_id === this.user);
           if (responses.length) {
             this.selected = responses[0].option_idx;
             // this person has already answered this question, don't save to db
             this.already_answered = true;
-            this.name_submission = false;
           } else {
             // save response to db
             const db = firebase.firestore();
-            this.user = input_el.value;
             db.collection("responses")
               .add({
                 question_id: this.question.id,
-                user_id: input_el.value,
+                user_id: this.user,
                 option_idx: this.selected
               })
               .then(() => {
-                this.name_submission = false;
                 this.displayQuestionStats();
                 document
                   .getElementById("question-container")

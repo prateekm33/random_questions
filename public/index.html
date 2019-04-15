@@ -20,75 +20,87 @@
       firebase.initializeApp(config);
     </script>
     <div id="app-container">
-      <div v-if="!!name_submission || !!already_answered" id="modal-msg-container">
-        <div id="name-sub" v-if="!!name_submission">
-          <div>Enter your name to submit</div>
-          <div id="name-input-container"><input placeholder="Name" id="name-input" :value="user"><div>Required</div></div>
-          <div class="button-container">
-            <button @click="done">Done</button>
-            <button @click="cancel">Cancel</button>
+      <div v-if="!authenticated" style="width: 100%; height: 100%">
+        <div>
+          <div v-if="!!login_error" style="color: red">{{ login_error_message }}</div>
+          <form @submit="logIn">
+            <input placeholder="email" type="email" id="email-input" required>
+            <input placeholder="password" type="password" id="password-input"  required>
+            <input placeholder="confirm password" type="password" id="confirm-password-input" v-if="!!new_user_form"  required>
+            <input type="submit" :value="new_user_form ? 'Sign up' : 'Log In'">
+          </form>
+          <div v-if="!new_user_form">
+            <span>New here?</span><button @click="showNewUserForm">Create an account.</button>
+          </div>
+          <div v-if="new_user_form">
+            <span>Already have an account?</span><button @click="hideNewUserForm">Log In.</button>
           </div>
         </div>
-        <div v-if="!!already_answered" id="already-answered">
-          <div>You've already answered this question</div>
-          <button @click="close">Close</button>
-        </div>
       </div>
-      <div id="app-main">
-        <div v-if="question !== null" id="question-container">
-          <div>{{ question.query }}</div>
-          <ul>
-            <div v-for="(op, index) in question.options">
-              <input type="radio" :value="index" name="question" class="question-radio" @click="setRadioOption">{{ op }}</input>
-            </div>
-          </ul>
+      <div v-if="!!authenticated" style="width: 100%; height: 100%">
+        <div v-if="!!already_answered" id="modal-msg-container">
+          <div id="already-answered">
+            <div>You've already answered this question</div>
+            <button @click="close">Close</button>
+          </div>
         </div>
-        <div><button @click="submit" style="margin-right: 10px;">Submit</button><button @click="next" style="margin-left: 10px;">Next Question</button></div>
+        <div id="app-main">
+          <div id="log-out-btn-container"><div style="margin-right: 10px;">Logged in as: {{ user }}</div><button @click="logOut" >Log Out</button></div>
+          <div v-if="question !== null" id="question-container">
+            <div>{{ question.query }}</div>
+            <ul>
+              <div v-for="(op, index) in question.options">
+                <input type="radio" :value="index" name="question" class="question-radio" @click="setRadioOption">{{ op }}</input>
+              </div>
+            </ul>
+          </div>
+          <div><button @click="submit" style="margin-right: 10px;">Submit</button><button @click="next" style="margin-left: 10px;">Next Question</button></div>
 
-        <div v-if="show_stats" id="stats-container">
-          <div id="main-stats-header">QUESTION STATS</div>
-          <div id="stats-header-caption">Your answer: {{ question.options[selected] }}</div>
-          <div id="stats-inner-container">
-            <div class="table-section">
-              <div class="table-header">Breakdown by Individuals</div>
-              <div>Total Responses: {{ responses.length }}</div>
-              <div id="page-count-select">
-                <div>Responses per Page: </div>
-                <select @change="changePageViewCount">
-                  <option value="5" :selected="maxIndPageSize === 5 ? 'true' : ''">5</option>
-                  <option value="10" :selected="maxIndPageSize === 10 ? 'true' : ''">10</option>
-                  <option value="20" :selected="maxIndPageSize === 20 ? 'true' : ''">20</option>
-                  <option value="25" :selected="maxIndPageSize === 25 ? 'true' : ''">25</option>
-                </select>
-              </div>
-              <div class="table">
-                <div class="row header-row">
-                  <div>Participant</div><div>Response</div>
+          <div v-if="show_stats" id="stats-container">
+            <div id="main-stats-header">QUESTION STATS</div>
+            <div id="stats-header-caption">Your answer: {{ question.options[selected] }}</div>
+            <div id="stats-inner-container">
+              <div class="table-section">
+                <div class="table-header">Breakdown by Individuals</div>
+                <div>Total Responses: {{ responses.length }}</div>
+                <div id="page-count-select">
+                  <div>Responses per Page: </div>
+                  <select @change="changePageViewCount">
+                    <option value="5" :selected="maxIndPageSize === 5 ? 'true' : ''">5</option>
+                    <option value="10" :selected="maxIndPageSize === 10 ? 'true' : ''">10</option>
+                    <option value="20" :selected="maxIndPageSize === 20 ? 'true' : ''">20</option>
+                    <option value="25" :selected="maxIndPageSize === 25 ? 'true' : ''">25</option>
+                  </select>
                 </div>
-                <div v-for="resp in disp_responses" class="row" :style="[{ background: colors[resp.option_idx], padding: '10px' }]">
-                  <div>{{ resp.user_id }}</div><div>{{ question.options[resp.option_idx] }}</div>
+                <div class="table">
+                  <div class="row header-row">
+                    <div>Participant</div><div>Response</div>
+                  </div>
+                  <div v-for="resp in disp_responses" class="row" :style="[{ background: colors[resp.option_idx], padding: '10px' }]">
+                    <div>{{ resp.user_id }}</div><div>{{ question.options[resp.option_idx] }}</div>
+                  </div>
+                </div>
+                <div class="button-container">
+                  <button @click="prevIndTable" :disabled="prevIndTableDisabled">Prev</button>
+                  <div>Page {{ Math.floor(indTableCursor / maxIndPageSize) + 1}} / {{ Math.floor(responses.length / maxIndPageSize) + 1 }}</div>
+                  <button @click="nextIndTable" :disabled="nextIndTableDisabled">Next</button>
                 </div>
               </div>
-              <div class="button-container">
-                <button @click="prevIndTable" :disabled="prevIndTableDisabled">Prev</button>
-                <div>Page {{ Math.floor(indTableCursor / maxIndPageSize) + 1}} / {{ Math.floor(responses.length / maxIndPageSize) + 1 }}</div>
-                <button @click="nextIndTable" :disabled="nextIndTableDisabled">Next</button>
+
+              <div class="table-section">
+                <div class="table-header">Breakdown by Answer</div>
+                <div class="table">
+                  <div class="row header-row">
+                    <div>Answer</div><div>Count (Percentage)</div>
+                  </div>
+                  <div v-for="(resp, index) in ans_responses" class="row" :style="[{ background: resp.color, padding: '10px' }]">
+                    <div>{{ question.options[index] }}</div>
+                    <div>{{ resp.count }} <span>({{ resp.percentage.toFixed(2) }}%)</span></div>
+                  </div>
+                </div>
               </div>
+
             </div>
-
-            <div class="table-section">
-              <div class="table-header">Breakdown by Answer</div>
-              <div class="table">
-                <div class="row header-row">
-                  <div>Answer</div><div>Count (Percentage)</div>
-                </div>
-                <div v-for="(resp, index) in ans_responses" class="row" :style="[{ background: resp.color, padding: '10px' }]">
-                  <div>{{ question.options[index] }}</div>
-                  <div>{{ resp.count }} <span>({{ resp.percentage.toFixed(2) }}%)</span></div>
-                </div>
-              </div>
-            </div>
-
           </div>
         </div>
       </div>
